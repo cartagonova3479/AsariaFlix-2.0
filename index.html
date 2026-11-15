@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asaria Player</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#09090d;color:white;
+ font-family:Arial,sans-serif
+}
+header{
+ padding:20px;background:#15151d;
+ border-bottom:2px solid #c69b38
+}
+.logo{font-size:27px;font-weight:bold;color:#d8ad48}
+main{max-width:950px;margin:auto;padding:18px}
+h2{color:#d8ad48}
+.panel{
+ background:#191922;padding:16px;
+ border-radius:12px;margin:15px 0
+}
+input{
+ width:100%;padding:13px;border-radius:7px;
+ border:1px solid #555;background:#101018;color:white;
+ margin:8px 0
+}
+button{
+ background:#c69b38;color:#111;border:0;
+ padding:12px 16px;border-radius:7px;
+ font-weight:bold;margin:5px;cursor:pointer
+}
+video{
+ width:100%;background:black;border-radius:9px;
+ max-height:65vh
+}
+.controls{display:flex;flex-wrap:wrap;gap:5px}
+small{color:#bbb}
+#estado{color:#e5bd60;margin:12px 0}
+</style>
+</head>
+<body>
+<header>
+ <div class="logo">A ASARIA PLAYER</div>
+ <p>El reproductor oficial de AsariaFlix</p>
+</header>
+
+<main>
+ <div class="panel">
+  <h2>REPRODUCIR VÍDEO</h2>
+  <label for="url">Enlace del vídeo MP4:</label>
+  <input id="url" type="url"
+   placeholder="Pega aquí el enlace del vídeo">
+  <button onclick="cargarVideo()">▶ CARGAR VÍDEO</button>
+  <p id="estado">Esperando un enlace de vídeo.</p>
+ </div>
+
+ <div class="panel">
+  <h2 id="titulo">ASARIA PLAYER</h2>
+  <video id="video" controls playsinline preload="metadata"></video>
+  <div class="controls">
+   <button onclick="saltar(-10)">⏪ 10 segundos</button>
+   <button onclick="saltar(10)">10 segundos ⏩</button>
+   <button onclick="velocidad()">Velocidad <span id="vel">1x</span></button>
+   <button onclick="pantallaCompleta()">⛶ Pantalla completa</button>
+  </div>
+  <p><label for="sub">Añadir subtítulos:</label></p>
+  <input id="sub" type="file" accept=".vtt,.srt"
+   onchange="ponerSubtitulos(event)">
+ </div>
+ <div class="panel">
+  <h2>CONTINUAR VIENDO</h2>
+  <p id="progreso">Todavía no hay progreso guardado.</p>
+  <button onclick="continuar()">CONTINUAR</button>
+ </div>
+</main>
+
+<script>
+const video=document.getElementById("video");
+const estado=document.getElementById("estado");
+let velocidadActual=1;
+let ultimoEnlace="";
+let archivoSubtitulos=null;
+
+function cargarVideo(){
+ const url=document.getElementById("url").value.trim();
+ if(!url){
+  estado.textContent="Introduce un enlace primero.";
+  return;
+ }
+ try{
+  const direccion=new URL(url);
+  if(!["http:","https:"].includes(direccion.protocol)){
+   throw new Error();
+  }
+ }catch(e){
+  estado.textContent="El enlace no es válido.";
+  return;
+ }
+ video.pause();
+ video.src=url;
+ video.load();
+ ultimoEnlace=url;
+ document.getElementById("titulo").textContent="ASARIA PLAYER";
+ estado.textContent="Cargando vídeo...";
+ video.play().catch(()=>{
+  estado.textContent="Vídeo cargado. Pulsa reproducir.";
+ });
+}
+
+video.addEventListener("loadedmetadata",()=>{
+ estado.textContent="Vídeo preparado correctamente.";
+ const guardado=localStorage.getItem("asaria_"+ultimoEnlace);
+ if(guardado){
+  const tiempo=Number(guardado);
+  if(tiempo>5 && tiempo<video.duration-5){
+   video.currentTime=tiempo;
+   document.getElementById("progreso").textContent=
+    "Última posición: "+Math.floor(tiempo)+" segundos.";
+  }
+ }
+});
+
+video.addEventListener("error",()=>{
+ estado.textContent=
+ "No se pudo reproducir. Comprueba el enlace y el formato.";
+});
+
+video.addEventListener("timeupdate",()=>{
+ if(ultimoEnlace && video.currentTime>0){
+  localStorage.setItem("asaria_"+ultimoEnlace,video.currentTime);
+ }
+});
+
+video.addEventListener("ended",()=>{
+ if(ultimoEnlace){
+  localStorage.removeItem("asaria_"+ultimoEnlace);
+ }
+ document.getElementById("progreso").textContent=
+ "Vídeo terminado.";
+});
+
+function saltar(segundos){
+ if(video.duration){
+  video.currentTime=Math.max(0,
+   Math.min(video.duration,video.currentTime+segundos));
+ }
+}
+
+function velocidad(){
+ velocidadActual=velocidadActual>=2?0.75:velocidadActual+0.25;
+ video.playbackRate=velocidadActual;
+ document.getElementById("vel").textContent=velocidadActual+"x";
+}
+
+function pantallaCompleta(){
+ if(video.requestFullscreen){
+  video.requestFullscreen();
+ }else if(video.webkitEnterFullscreen){
+  video.webkitEnterFullscreen();
+ }
+}
+
+function continuar(){
+ if(ultimoEnlace){
+  const t=Number(localStorage.getItem("asaria_"+ultimoEnlace)||0);
+  video.currentTime=t;
+  video.play();
+ }else{
+  estado.textContent="Primero carga un vídeo.";
+ }
+}
+
+function ponerSubtitulos(evento){
+ const archivo=evento.target.files[0];
+ if(!archivo)return;
+ const lector=new FileReader();
+ lector.onload=()=>{
+  let texto=String(lector.result);
+  if(archivo.name.toLowerCase().endsWith(".srt")){
+   texto="WEBVTT\n\n"+texto.replace(/\r/g,"")
+    .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g,"$1.$2");
+  }
+  if(archivoSubtitulos){
+   URL.revokeObjectURL(archivoSubtitulos);
+  }
+  archivoSubtitulos=URL.createObjectURL(
+   new Blob([texto],{type:"text/vtt"})
+  );
+  video.querySelectorAll("track").forEach(t=>t.remove());
+  const pista=document.createElement("track");
+  pista.kind="subtitles";
+  pista.label="Español";
+  pista.srclang="es";
+  pista.src=archivoSubtitulos;
+  pista.default=true;
+  video.appendChild(pista);
+  estado.textContent="Subtítulos añadidos.";
+ };
+ lector.readAsText(archivo);
+}
+</script>
+</body>
+</html>
+
